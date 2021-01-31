@@ -1,6 +1,9 @@
+using CppSharp.Generators;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -409,5 +412,218 @@ namespace CppSharp
         }
 
         #endregion
+    }
+
+    public class ProtoGenerator : BlockGenerator
+    {
+        BindingContext Context { get; set; }
+
+        public ProtoGenerator(BindingContext context)
+        {
+            Context = context;
+        }
+
+        public override string Generate()
+        {
+            HashSet<string> visistedNamespaces = new HashSet<string>();
+            foreach(var enums in Context.Proto.Enums)
+            {
+                visistedNamespaces.Add(enums.Key);
+
+                WriteLine("syntax = \"proto3\";");
+                NewLine();
+                WriteLine($"option csharp_namespace = \"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(enums.Key.Replace(".protobuf", ""))}\";");
+                NewLine();
+                WriteLine($"package {enums.Key};");
+                NewLine();
+
+                HashSet<string> dupEnumItems = new HashSet<string>();
+
+                foreach (var @enum in enums.Value)
+                {
+                    Write($"enum {@enum.Name} ");
+                    WriteOpenBraceAndIndent();
+
+                    IEnumerable<string> values = @enum.Enums.Select(x => x.Value);
+
+                    if (values.Count() != values.Distinct().Count())
+                    {
+                        WriteLine("option allow_alias = true;");
+                    }
+
+                    bool needsUnknown = !values.Any(x => x == "0");
+                    if (needsUnknown)
+                    {
+                        @enum.Enums.Add(new KeyValuePair<string, string>($"{@enum.Name}Unknown", "0"));
+                    }
+
+                    @enum.Enums = @enum.Enums.OrderByDescending(o => o.Value == "0").ThenBy(o => o.Value).ToList();
+
+                    foreach (var kvp in @enum.Enums)
+                    {
+                        if (dupEnumItems.Contains(kvp.Key))
+                        {
+                            WriteLine($"{@enum.Name}{kvp.Key} = {kvp.Value};");
+                        }
+                        else
+                        {
+                            dupEnumItems.Add(kvp.Key);
+                            WriteLine($"{kvp.Key} = {kvp.Value};");
+                        }
+                    }
+
+                    UnindentAndWriteCloseBrace();
+                    NewLine();
+                }
+
+                string output = base.Generate();
+
+                string outputFileName = enums.Key.Replace(".protobuf", "").Replace('.', '_') + ".proto";
+                string filePath = Path.Combine(Context.Options.OutputDir, outputFileName);
+                using (var stream = File.AppendText(filePath))
+                {
+                    stream.Write(output);
+                }
+                
+                RootBlock.Text.StringBuilder.Clear();
+            }
+
+            foreach (var messages in Context.Proto.Messages)
+            {
+                if (!visistedNamespaces.Contains(messages.Key))
+                {
+                    WriteLine("syntax = \"proto3\";");
+                    NewLine();
+                    WriteLine($"option csharp_namespace = \"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(messages.Key.Replace(".protobuf", ""))}\";");
+                    NewLine();
+                    WriteLine($"package {messages.Key};");
+                    NewLine();
+                }
+
+                HashSet<string> dupEnumItems = new HashSet<string>();
+
+                HashSet<string> allImports = new HashSet<string>();
+
+                string outputFileName = messages.Key.Replace(".protobuf", "").Replace('.', '_') + ".proto";
+
+                foreach (var msg in messages.Value)
+                {
+                    bool hasFieldsWithoutTypes = msg.Fields.Any(x => string.IsNullOrEmpty(x.FieldType));
+                    if (msg.Fields.Count() > 0 && !hasFieldsWithoutTypes)
+                    {
+                        IEnumerable<string> imports = msg.Fields
+                            .Where(x => x.FieldType.Contains('.'))
+                            .Select(x => x.FieldType.Substring(0, x.FieldType.LastIndexOf('.')));
+
+                        IEnumerable<string> newImports = imports.Except(allImports);
+
+                        foreach (string newImport in newImports)
+                        {
+                            string newImportFinal = newImport;
+                            if (newImportFinal.Contains("repeated "))
+                            {
+                                newImportFinal = newImport.Substring("repeated ".Length);
+                            }
+
+                            string importFileName = newImportFinal.Replace(".protobuf", "").Replace('.', '_') + ".proto";
+
+                            if (importFileName != outputFileName)
+                            {
+                                WriteLine($"import \"Protos/Models/{importFileName}\";");
+                            }
+                        }
+
+                        allImports = allImports.Union(newImports).ToHashSet();
+
+                        Write($"message {msg.MessageName} ");
+                        WriteOpenBraceAndIndent();
+
+                        int i = 0;                        
+                        foreach (ProtoField field in msg.Fields)
+                        {
+                            WriteLine($"{field.FieldType} {field.FieldName} = {++i};");
+                        }
+
+                        UnindentAndWriteCloseBrace();
+                        NewLine();
+                    }
+                }
+
+                string output = base.Generate();
+                
+                string filePath = Path.Combine(Context.Options.OutputDir, outputFileName);
+                using (var stream = File.AppendText(filePath))
+                {
+                    stream.Write(output);
+                }
+
+                RootBlock.Text.StringBuilder.Clear();
+            }
+
+            //Dictionary<string, int> duplicates = new Dictionary<string, int>();
+
+            //foreach(ProtoEnum @enum in Context.Proto.Enums)
+            //{
+            //    if (duplicates.ContainsKey(@enum.Name))
+            //    {
+            //        duplicates[@enum.Name] = duplicates[@enum.Name] + 1;
+            //        @enum.Name = $"{@enum.Name}{duplicates[@enum.Name]}";
+            //    }
+            //    else
+            //    {
+            //        duplicates.Add(@enum.Name, 1);
+            //    }
+
+            //    Write($"enum {@enum.Name} ");
+            //    WriteOpenBraceAndIndent();
+
+            //    IEnumerable<string> values = @enum.Enums.Select(x => x.Value);
+
+            //    if(values.Count() != values.Distinct().Count())
+            //    {
+            //        WriteLine("option allow_alias = true;");
+            //    }
+
+            //    bool needsUnknown = !values.Any(x => x == "0");
+            //    if(needsUnknown)
+            //    {
+            //        @enum.Enums.Add(new KeyValuePair<string, string>("Unknown", "0"));
+            //    }
+
+            //    @enum.Enums = @enum.Enums.OrderByDescending(o => o.Value == "0").ThenBy(o => o.Value).ToList();
+
+            //    foreach (var kvp in @enum.Enums)
+            //    {
+            //        if(kvp.Key.StartsWith(@enum.Name) || kvp.Key.StartsWith('_') || @enum.Name.EndsWith('_'))
+            //        {
+            //            WriteLine($"{kvp.Key} = {kvp.Value};");                        
+            //        }
+            //        else
+            //        {
+            //            WriteLine($"{@enum.Name}_{kvp.Key} = {kvp.Value};");
+            //        }                    
+            //    }
+
+            //    UnindentAndWriteCloseBrace();
+            //    NewLine();
+            //}
+
+            //foreach(ProtoMessage msg in Context.Proto.Messages)
+            //{
+            //    Write($"message {msg.MessageName} ");
+            //    WriteOpenBraceAndIndent();
+
+            //    int i = 0;
+            //    foreach(ProtoField field in msg.Fields)
+            //    {
+            //        WriteLine($"{field.FieldType} {field.FieldName} = {++i};");
+            //    }
+
+            //    UnindentAndWriteCloseBrace();
+            //    NewLine();
+            //}
+
+            return "";
+        }
     }
 }

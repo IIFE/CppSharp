@@ -267,9 +267,12 @@ namespace CppSharp.Generators.CLI
             if (CLIGenerator.ShouldGenerateClassNativeField(@class))
                 GenerateClassNativeField(@class, nativeType);
 
-            GenerateClassConstructors(@class, nativeType);
+            ProtoMessage pm = new ProtoMessage { MessageName = @class.Name };
+            Context.Proto.AddMessage(@class.QualifiedProtoNamespace, pm);
 
-            GenerateClassProperties(@class);
+            GenerateClassConstructors(@class, nativeType, pm);
+
+            GenerateClassProperties(@class, pm);
 
             GenerateClassEvents(@class);
             GenerateClassMethods(@class.Methods);
@@ -367,7 +370,7 @@ namespace CppSharp.Generators.CLI
             Unindent();
         }
 
-        public void GenerateClassConstructors(Class @class, string nativeType)
+        public void GenerateClassConstructors(Class @class, string nativeType, ProtoMessage pm)
         {
             if (@class.IsStatic)
                 return;
@@ -382,6 +385,8 @@ namespace CppSharp.Generators.CLI
 
             WriteLine($"static {@class.Name}^ {Helpers.CreateInstanceIdentifier}(::System::IntPtr native, bool {Helpers.OwnsNativeInstanceIdentifier});");
 
+            var validCtors = @class.Constructors.Where(x => !ASTUtils.CheckIgnoreMethod(x) && !FunctionIgnored(x) && !x.IsCopyConstructor).Count();
+
             foreach (var ctor in @class.Constructors)
             {
                 if (ASTUtils.CheckIgnoreMethod(ctor) || FunctionIgnored(ctor))
@@ -391,7 +396,7 @@ namespace CppSharp.Generators.CLI
                 if (@class.IsValueType && ctor.IsCopyConstructor)
                     continue;
 
-                GenerateMethod(ctor);
+                GenerateMethod(ctor, validCtors == 1 && ctor.Parameters.Count() > 0 ? pm : null);
             }
 
             if (@class.IsRefType)
@@ -529,11 +534,11 @@ namespace CppSharp.Generators.CLI
                     continue;
                 }
 
-                GenerateMethod(method);
+                GenerateMethod(method, null);
             }
 
             foreach(var method in staticMethods)
-                GenerateMethod(method);
+                GenerateMethod(method, null);
 
             Unindent();
         }
@@ -600,7 +605,7 @@ namespace CppSharp.Generators.CLI
             }
         }
 
-        public void GenerateClassProperties(Class @class)
+        public void GenerateClassProperties(Class @class, ProtoMessage pm)
         {
             // Handle the case of struct (value-type) inheritance by adding the base
             // properties to the managed value subtypes.
@@ -608,7 +613,7 @@ namespace CppSharp.Generators.CLI
             {
                 foreach (var @base in @class.Bases.Where(b => b.IsClass && b.Class.IsDeclared))
                 {
-                    GenerateClassProperties(@base.Class);
+                    GenerateClassProperties(@base.Class, pm);
                 }
             }
 
@@ -623,7 +628,7 @@ namespace CppSharp.Generators.CLI
                 }
 
                 GenerateDeclarationCommon(prop);
-                GenerateProperty(prop);
+                GenerateProperty(prop, pm);
             }
             Unindent();
         }
@@ -647,7 +652,7 @@ namespace CppSharp.Generators.CLI
             UnindentAndWriteCloseBrace();
         }
 
-        public void GenerateProperty(Property property)
+        public void GenerateProperty(Property property, ProtoMessage pm)
         {
             if (!(property.HasGetter || property.HasSetter) || TypeIgnored(property.Type))
                 return;
@@ -674,13 +679,15 @@ namespace CppSharp.Generators.CLI
                     WriteLine("void set({0});", type);
 
                 UnindentAndWriteCloseBrace();
+
+                pm.Fields.Add(new ProtoField { FieldName = property.Name, FieldType = type.ProtoType });
             }
 
             PopBlock(NewLineKind.BeforeNextBlock);
         }
 
         public override void GenerateMethodSpecifier(Method method,
-            MethodSpecifierKind? kind = null)
+            MethodSpecifierKind? kind = null, ProtoMessage pm = null)
         {
             if ((method.IsVirtual || method.IsOverride) && !method.IsOperator)
                 Write("virtual ");
@@ -701,7 +708,7 @@ namespace CppSharp.Generators.CLI
             else
                 Write("{0} {1}(", method.ReturnType, method.Name);
 
-            GenerateMethodParameters(method);
+            GenerateMethodParameters(method, pm);
 
             Write(")");
 
@@ -709,14 +716,14 @@ namespace CppSharp.Generators.CLI
                 Write(" override");
         }
 
-        public void GenerateMethod(Method method)
+        public void GenerateMethod(Method method, ProtoMessage pm)
         {
             if (ASTUtils.CheckIgnoreMethod(method) || FunctionIgnored(method)) return;
 
             PushBlock(BlockKind.Method, method);
             GenerateDeclarationCommon(method);
 
-            GenerateMethodSpecifier(method);
+            GenerateMethodSpecifier(method, null, pm);
             WriteLine(";");
 
             if (method.OperatorKind == CXXOperatorKind.EqualEqual)

@@ -2506,7 +2506,7 @@ internal static{(@new ? " new" : string.Empty)} {printedClass} __GetInstance({Ty
         }
 
         public override void GenerateMethodSpecifier(Method method,
-            MethodSpecifierKind? kind = null)
+            MethodSpecifierKind? kind = null, ProtoMessage pm = null)
         {
             bool isTemplateMethod = method.Parameters.Any(
                 p => p.Kind == ParameterKind.Extension);

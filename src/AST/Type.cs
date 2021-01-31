@@ -12,12 +12,21 @@ namespace CppSharp.AST
     [DebuggerDisplay("{ToString()} [{GetType().Name}]")]
     public abstract class Type : ICloneable
     {
+        public abstract string ProtoType { get; }
+
         public static Func<Type, string> TypePrinterDelegate;
 
         public bool IsDependent { get; set; }
 
         protected Type()
         {
+        }
+
+        public Type GetDesugaredFinalPointeeElseType()
+        {
+            Type finalPointee = this.GetFinalPointee();
+
+            return finalPointee != null ? finalPointee.Desugar() : this;
         }
 
         protected Type(Type type)
@@ -137,6 +146,8 @@ namespace CppSharp.AST
             return visitor.VisitTagType(this, quals);
         }
 
+        public override string ProtoType { get => Declaration.QualifiedProtoName; }
+
         public override object Clone()
         {
             return new TagType(this);
@@ -196,6 +207,8 @@ namespace CppSharp.AST
             get { return QualifiedType.Type; }
         }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
             return visitor.VisitArrayType(this, quals);
@@ -254,6 +267,8 @@ namespace CppSharp.AST
         public CallingConvention CallingConvention { get; set; }
 
         public ExceptionSpecType ExceptionSpecType { get; set; }
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public FunctionType()
         {
@@ -341,6 +356,8 @@ namespace CppSharp.AST
         public QualifiedType QualifiedPointee;
         public Type Pointee { get { return QualifiedPointee.Type;  } }
 
+        public override string ProtoType => Pointee.GetDesugaredFinalPointeeElseType().ProtoType;
+
         public TypeModifier Modifier;
 
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
@@ -389,6 +406,8 @@ namespace CppSharp.AST
             get { return QualifiedPointee.Type; }
         }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
             return visitor.VisitMemberPointerType(this, quals);
@@ -432,6 +451,14 @@ namespace CppSharp.AST
             Declaration = type.Declaration;
         }
 
+        public override string ProtoType 
+        { 
+            get
+            {                    
+                return this.Declaration.Type.GetDesugaredFinalPointeeElseType().ProtoType;
+            }
+        }
+
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
             return visitor.VisitTypedefType(this, quals);
@@ -471,6 +498,8 @@ namespace CppSharp.AST
         public QualifiedType Modified;
 
         public QualifiedType Equivalent;
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public AttributedType()
         {
@@ -519,6 +548,8 @@ namespace CppSharp.AST
         public QualifiedType Decayed;
         public QualifiedType Original;
         public QualifiedType Pointee;
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public DecayedType()
         {
@@ -681,6 +712,8 @@ namespace CppSharp.AST
 
         public QualifiedType Desugared;
 
+        public override string ProtoType => Template.Name == "basic_string" ? "string" : string.Empty;
+
         public ClassTemplateSpecialization GetClassTemplateSpecialization()
         {
             return GetDeclaration() as ClassTemplateSpecialization;
@@ -758,6 +791,8 @@ namespace CppSharp.AST
 
         public QualifiedType Desugared;
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
         {
@@ -792,6 +827,8 @@ namespace CppSharp.AST
         public uint Depth;
         public uint Index;
         public bool IsParameterPack;
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public TemplateParameterType()
         {
@@ -849,6 +886,8 @@ namespace CppSharp.AST
         public QualifiedType Replacement;
 
         public TemplateParameterType ReplacedParameter { get; set; }
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public TemplateParameterSubstitutionType()
         {
@@ -911,6 +950,8 @@ namespace CppSharp.AST
 
         public QualifiedType InjectedSpecializationType { get; set; }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
         {
@@ -958,6 +999,8 @@ namespace CppSharp.AST
 
         public string Identifier { get; set; }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
         {
@@ -995,6 +1038,19 @@ namespace CppSharp.AST
 
         public System.Type Type;
 
+        public override string ProtoType
+        {
+            get
+            {
+                if(Type == typeof(string) || Type == typeof(Guid))
+                {
+                    return "string";
+                }
+
+                return "";
+            }
+        }
+
         public override T Visit<T>(ITypeVisitor<T> visitor,
                                    TypeQualifiers quals = new TypeQualifiers())
         {
@@ -1019,6 +1075,8 @@ namespace CppSharp.AST
 
     public class PackExpansionType : Type
     {
+        public override string ProtoType => throw new NotImplementedException();
+
         public PackExpansionType()
         {
         }
@@ -1055,6 +1113,8 @@ namespace CppSharp.AST
         public QualifiedType Desugared { get; set; }
         public QualifiedType BaseType { get; set; }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
             return visitor.VisitUnaryTransformType(this, quals);
@@ -1081,6 +1141,8 @@ namespace CppSharp.AST
         }
 
         public UnresolvedUsingTypename Declaration { get; set; }
+
+        public override string ProtoType => throw new NotImplementedException();
 
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
@@ -1109,6 +1171,8 @@ namespace CppSharp.AST
         public QualifiedType ElementType { get; set; }
         public uint NumElements { get; set; }
 
+        public override string ProtoType => throw new NotImplementedException();
+
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
             return visitor.VisitVectorType(this, quals);
@@ -1125,13 +1189,16 @@ namespace CppSharp.AST
 
     public class UnsupportedType : Type
     {
+        private string _protoType = string.Empty;
+
         public UnsupportedType()
         {
         }
 
-        public UnsupportedType(string description)
+        public UnsupportedType(string description, string protoType)
         {
             Description = description;
+            _protoType = protoType;
         }
 
         public UnsupportedType(UnsupportedType type)
@@ -1140,6 +1207,8 @@ namespace CppSharp.AST
         }
 
         public string Description;
+
+        public override string ProtoType => _protoType;
 
         public override T Visit<T>(ITypeVisitor<T> visitor, TypeQualifiers quals = new TypeQualifiers())
         {
@@ -1156,7 +1225,7 @@ namespace CppSharp.AST
 
     public class CustomType : UnsupportedType
     {
-        public CustomType(string description) : base(description)
+        public CustomType(string description, string protoType = "") : base(description, protoType)
         {
         }
     }
@@ -1209,13 +1278,61 @@ namespace CppSharp.AST
 
         public BuiltinType(PrimitiveType type)
         {
-            Type = type;
+            Type = type;            
         }
 
         public BuiltinType(BuiltinType type)
             : base(type)
         {
             Type = type.Type;
+        }
+
+        public override string ProtoType 
+        {
+            get
+            {
+                switch (Type)
+                {
+                    case PrimitiveType.Bool:
+                        return "bool";
+                    case PrimitiveType.Char:
+                        return "sfixed32";
+                    case PrimitiveType.Char16:
+                        return "sfixed32";
+                    case PrimitiveType.Char32:
+                        return "sfixed32";
+                    case PrimitiveType.Double:
+                        return "double";
+                    case PrimitiveType.Float:
+                        return "float";
+                    case PrimitiveType.Int:
+                        return "sint32";
+                    case PrimitiveType.Long:
+                        return "sint64";
+                    case PrimitiveType.LongLong:
+                        return "sint64";
+                    case PrimitiveType.SChar:
+                        return "sfixed32";
+                    case PrimitiveType.Short:
+                        return "sint32";
+                    case PrimitiveType.String:
+                        return "string";
+                    case PrimitiveType.UChar:
+                        return "fixed32";
+                    case PrimitiveType.UInt:
+                        return "uint32";
+                    case PrimitiveType.ULong:
+                        return "uint64";
+                    case PrimitiveType.ULongLong:
+                        return "uint64";
+                    case PrimitiveType.UShort:
+                        return "uint32";
+                    case PrimitiveType.WideChar:
+                        return "";
+                    default:
+                        return "";
+                }
+            }
         }
 
         public bool IsUnsigned

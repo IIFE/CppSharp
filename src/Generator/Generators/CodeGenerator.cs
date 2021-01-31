@@ -186,6 +186,13 @@ namespace CppSharp.Generators
 
         public virtual void GenerateEnumItems(Enumeration @enum)
         {
+            ProtoEnum proto = !string.IsNullOrEmpty(@enum.OriginalName) ? new ProtoEnum() : null;
+
+            if(proto != null)
+            {
+                proto.Name = @enum.Name;
+            }
+
             for (int i = 0; i < @enum.Items.Count; i++)
             {
                 var item = @enum.Items[i];
@@ -194,6 +201,16 @@ namespace CppSharp.Generators
 
                 item.Visit(this);
                 WriteLine(i == @enum.Items.Count - 1 ? string.Empty : ",");
+
+                if (proto != null)
+                {
+                    proto.Enums.Add(new KeyValuePair<string, string>(item.Name, @enum.GetItemValueAsString(item)));
+                }
+            }
+
+            if (proto != null)
+            {
+                Context.Proto.AddEnum(@enum.QualifiedProtoNamespace, proto);
             }
         }
 
@@ -230,7 +247,7 @@ namespace CppSharp.Generators
         }
 
         public virtual void GenerateMethodSpecifier(Method method,
-            MethodSpecifierKind? kind = null)
+            MethodSpecifierKind? kind = null, ProtoMessage pm = null)
         {
         }
 

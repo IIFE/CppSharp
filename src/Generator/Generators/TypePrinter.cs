@@ -10,14 +10,16 @@ namespace CppSharp.Generators
     {
         public string Type { get; set; }
         public string Name { get; set; } = string.Empty;
+        public string ProtoType { get; set; } = string.Empty;
         public StringBuilder NamePrefix { get; set; } = new StringBuilder();
         public StringBuilder NameSuffix { get; set; } = new StringBuilder();
         public TypeMap TypeMap { get; set; }
 
-        public TypePrinterResult(string type = "", string nameSuffix = "")
+        public TypePrinterResult(string type = "", string nameSuffix = "", string protoType = "")
         {
             Type = type;
             NameSuffix.Append(nameSuffix);
+            ProtoType = protoType;
         }
 
         public void RemoveNamespace()
@@ -27,8 +29,8 @@ namespace CppSharp.Generators
                 Type = Type.Substring(index + 1);
         }
 
-        public static implicit operator TypePrinterResult(string type) =>
-            new TypePrinterResult { Type = type };
+        public static implicit operator TypePrinterResult(string t) =>
+            new TypePrinterResult (type: t);
 
         public static implicit operator string(TypePrinterResult result) =>
            result.ToString();

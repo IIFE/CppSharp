@@ -35,7 +35,7 @@ namespace CppSharp.Generators.CLI
             return method.Name;
         }
 
-        public void GenerateMethodParameters(Method method)
+        public void GenerateMethodParameters(Method method, ProtoMessage pm)
         {
             for (var i = 0; i < method.Parameters.Count; ++i)
             {
@@ -44,9 +44,16 @@ namespace CppSharp.Generators.CLI
                     continue;
 
                 var param = method.Parameters[i];
-                Write("{0}", CTypePrinter.VisitParameter(param));
+                var paramType = CTypePrinter.VisitParameter(param);
+
+                Write("{0}", paramType.ToString());
                 if (i < method.Parameters.Count - 1)
                     Write(", ");
+
+                if (pm != null)
+                {
+                    pm.Fields.Add(new ProtoField { FieldName = param.Name, FieldType = paramType.ProtoType });
+                }
             }
         }
 

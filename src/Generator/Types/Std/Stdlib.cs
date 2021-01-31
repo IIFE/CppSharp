@@ -486,8 +486,12 @@ namespace CppSharp.Types.Std
 
         public override Type CLISignatureType(TypePrinterContext ctx)
         {
+            var tempParams = ctx.GetTemplateParameterList();
+
+            var protoParams = ctx.GetProtoTemplateParameterList();
+
             return new CustomType(
-                $"System::Collections::Generic::List<{ctx.GetTemplateParameterList()}>^");
+                $"System::Collections::Generic::List<{tempParams}>^", protoParams == "char" ? "bytes" : $"repeated {protoParams}");
         }
 
         public override void CLIMarshalToNative(MarshalContext ctx)
@@ -628,7 +632,7 @@ namespace CppSharp.Types.Std
             var type = Type as TemplateSpecializationType;
             return new CustomType(
                 $@"System::Collections::Generic::Dictionary<{
-                    type.Arguments[0].Type}, {type.Arguments[1].Type}>^");
+                    type.Arguments[0].Type}, {type.Arguments[1].Type}>^", $"map<{type.Arguments[0].Type.Type.ProtoType},{type.Arguments[1].Type.Type.ProtoType}>");
         }
 
         public override void CLIMarshalToNative(MarshalContext ctx)

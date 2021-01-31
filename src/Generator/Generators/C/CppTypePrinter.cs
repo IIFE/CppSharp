@@ -331,7 +331,7 @@ namespace CppSharp.Generators.C
         public override TypePrinterResult VisitCILType(CILType type, TypeQualifiers quals)
         {
             if (type.Type == typeof(string))
-                return quals.IsConst ? "const char*" : "char*";
+                return quals.IsConst ? new TypePrinterResult(type: "const char*" , protoType: "string") : new TypePrinterResult(type: "char*", protoType: "string");
 
             switch (System.Type.GetTypeCode(type.Type))
             {
@@ -430,7 +430,7 @@ namespace CppSharp.Generators.C
                 return result;
 
             result.Name = param.Name;
-            return result.ToString();
+            return result;
         }
 
         public override TypePrinterResult VisitDelegate(FunctionType function)

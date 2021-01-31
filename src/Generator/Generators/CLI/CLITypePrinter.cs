@@ -21,7 +21,8 @@ namespace CppSharp.Generators.CLI
             if (TypeMapDatabase.FindTypeMap(tag, out typeMap))
             {
                 var typePrinterContext = new TypePrinterContext { Type = tag };
-                return typeMap.CLISignatureType(typePrinterContext).ToString();
+                Type cliType = typeMap.CLISignatureType(typePrinterContext);
+                return new TypePrinterResult(type: cliType.ToString(), protoType: cliType.ProtoType);
             }
 
             Declaration decl = tag.Declaration;
@@ -38,9 +39,11 @@ namespace CppSharp.Generators.CLI
             if (array.SizeType == ArrayType.ArraySize.Incomplete &&
                 array.Type.Desugar().IsPrimitiveType(PrimitiveType.Char) &&
                 array.QualifiedType.Qualifiers.IsConst)
-                return "System::String^";
+                return new TypePrinterResult(type: "System::String^", protoType: "string");
 
-            return $"cli::array<{array.Type.Visit(this)}>^";
+            var arrType = array.Type.Visit(this);
+            bool isCharArray = array.Type.Desugar().IsPrimitiveType(PrimitiveType.Char);
+            return new TypePrinterResult( type: $"cli::array<{arrType}>^", protoType: isCharArray ? $"string" : $"repeated {arrType.ProtoType}" );
         }
 
         public override TypePrinterResult VisitFunctionType(FunctionType function,
@@ -88,7 +91,7 @@ namespace CppSharp.Generators.CLI
             if (hasName && !string.IsNullOrEmpty(param.Name))
                 str += " " + param.Name;
 
-            return str;
+            return new TypePrinterResult( type: str, protoType: type.ProtoType );
         }
 
         public override TypePrinterResult VisitDelegate(FunctionType function)
@@ -175,32 +178,32 @@ namespace CppSharp.Generators.CLI
         {
             switch (primitive)
             {
-                case PrimitiveType.Bool: return "bool";
+                case PrimitiveType.Bool: return new TypePrinterResult(type: "bool", protoType: "bool");
                 case PrimitiveType.Void: return "void";
                 case PrimitiveType.Char16:
                 case PrimitiveType.Char32:
-                case PrimitiveType.WideChar: return "System::Char";
-                case PrimitiveType.Char: return Options.MarshalCharAsManagedChar ? "System::Char" : "char";
-                case PrimitiveType.SChar: return "signed char";
-                case PrimitiveType.UChar: return "unsigned char";
-                case PrimitiveType.Short: return "short";
-                case PrimitiveType.UShort: return "unsigned short";
-                case PrimitiveType.Int: return "int";
-                case PrimitiveType.UInt: return "unsigned int";
-                case PrimitiveType.Long: return "long";
-                case PrimitiveType.ULong: return "unsigned long";
-                case PrimitiveType.LongLong: return "long long";
-                case PrimitiveType.ULongLong: return "unsigned long long";
+                case PrimitiveType.WideChar: return new TypePrinterResult(type: "System::Char", protoType: "sfixed32");
+                case PrimitiveType.Char: return new TypePrinterResult ( type : Options.MarshalCharAsManagedChar ? "System::Char" : "char", protoType : "sfixed32" );
+                case PrimitiveType.SChar: return new TypePrinterResult ( type : "signed char", protoType : "sfixed32" );
+                case PrimitiveType.UChar: return new TypePrinterResult ( type : "unsigned char", protoType : "fixed32" );
+                case PrimitiveType.Short: return new TypePrinterResult ( type : "short", protoType : "sint32" );
+                case PrimitiveType.UShort: return new TypePrinterResult ( type : "unsigned short", protoType : "uint32" );
+                case PrimitiveType.Int: return new TypePrinterResult  ( type : "int", protoType : "sint32" );
+                case PrimitiveType.UInt: return new TypePrinterResult ( type : "unsigned int", protoType : "uint32" );
+                case PrimitiveType.Long: return new TypePrinterResult ( type : "long", protoType : "sint64" );
+                case PrimitiveType.ULong: return new TypePrinterResult ( type : "unsigned long", protoType : "uint64" );
+                case PrimitiveType.LongLong: return new TypePrinterResult  ( type : "long long", protoType : "sint64" );
+                case PrimitiveType.ULongLong: return new TypePrinterResult ( type : "unsigned long long", protoType : "uint64" );
                 case PrimitiveType.Int128: return "__int128";
                 case PrimitiveType.UInt128: return "__uint128";
                 case PrimitiveType.Half: return "__fp16";
-                case PrimitiveType.Float: return "float";
-                case PrimitiveType.Double: return "double";
+                case PrimitiveType.Float: return new TypePrinterResult  ( type : "float", protoType : "float" );
+                case PrimitiveType.Double: return new TypePrinterResult ( type : "double", protoType : "double" );
                 case PrimitiveType.LongDouble: return "long double";
                 case PrimitiveType.IntPtr: return "IntPtr";
                 case PrimitiveType.UIntPtr: return "UIntPtr";
                 case PrimitiveType.Null: return "void*";
-                case PrimitiveType.String: return "System::String";
+                case PrimitiveType.String: return new TypePrinterResult ( type : "System::String", protoType : "string" );
             }
 
             throw new NotSupportedException();
@@ -216,7 +219,8 @@ namespace CppSharp.Generators.CLI
             {
                 typeMap.Type = typedef;
                 var typePrinterContext = new TypePrinterContext { Type = typedef };
-                return typeMap.CLISignatureType(typePrinterContext).ToString();
+                Type cliType = typeMap.CLISignatureType(typePrinterContext);
+                return new TypePrinterResult( type: cliType.ToString(), protoType: cliType.ProtoType);
             }
 
             FunctionType func;
@@ -240,7 +244,8 @@ namespace CppSharp.Generators.CLI
             if (TypeMapDatabase.FindTypeMap(template, out typeMap) && !typeMap.IsIgnored)
             {
                 var typePrinterContext = new TypePrinterContext { Type = template };
-                return typeMap.CLISignatureType(typePrinterContext).ToString();
+                Type cliType = typeMap.CLISignatureType(typePrinterContext);
+                return new TypePrinterResult(type: cliType.ToString(), protoType: cliType.ProtoType);
             }
 
             return decl.Name;
@@ -300,7 +305,7 @@ namespace CppSharp.Generators.CLI
             if (!type.Type.IsValueType)
                 result += "^";
 
-            return result;
+            return new TypePrinterResult(type: result, protoType: type.ProtoType);
         }
 
         public override TypePrinterResult VisitUnsupportedType(UnsupportedType type, TypeQualifiers quals)
@@ -323,14 +328,16 @@ namespace CppSharp.Generators.CLI
                     rootNamespace = decl.Namespace.QualifiedName;
             }
 
-            names.Add(decl.Visit(this).ToString());
+            var withoutNs = decl.Visit(this).ToString();
+            names.Add(withoutNs);
 
             var result = string.Join("::", names);
             var translationUnit = decl.Namespace as TranslationUnit;
             if (translationUnit != null && translationUnit.HasFunctions &&
                 rootNamespace == translationUnit.FileNameWithoutExtension)
                 return "::" + result;
-            return result;
+
+            return new TypePrinterResult( type: result, protoType: decl.QualifiedProtoName);
         }
 
         public override TypePrinterResult VisitClassDecl(Class @class)

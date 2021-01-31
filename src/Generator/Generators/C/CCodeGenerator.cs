@@ -336,7 +336,7 @@ namespace CppSharp.Generators.C
         }
 
         public override void GenerateMethodSpecifier(Method method,
-            MethodSpecifierKind? kind = null)
+            MethodSpecifierKind? kind = null, ProtoMessage pm = null)
         {
             bool isDeclaration;
             if (kind.HasValue)

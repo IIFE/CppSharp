@@ -125,6 +125,9 @@ namespace CppSharp.Generators
                 }
             }
 
+            ProtoGenerator pg = new ProtoGenerator(Context);
+            pg.Generate();
+
             return outputs;
         }
 

@@ -206,6 +206,22 @@ namespace CppSharp.AST
             get { return OriginalName; }
         }
 
+        public virtual string QualifiedProtoName
+        {
+            get
+            {
+                return $"{QualifiedProtoNamespace}.{Name}";
+            }
+        }
+
+        public virtual string QualifiedProtoNamespace
+        {
+            get
+            {
+                return string.IsNullOrEmpty(Namespace.QualifiedName) ? $"dataservice.protobuf" : Namespace.QualifiedName.Replace("::", ".").ToLower() + ".protobuf";
+            }
+        }
+
         public static string QualifiedNameSeparator = "::";
 
         public string GetQualifiedName(Func<Declaration, string> getName,

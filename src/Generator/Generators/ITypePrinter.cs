@@ -82,6 +82,51 @@ namespace CppSharp.AST
 
             return string.Join(", ", paramsList);
         }
+
+        public string GetProtoTemplateParameterList()
+        {
+            if (Kind == TypePrinterContextKind.Template)
+            {
+                var template = (Template)Declaration;
+                return string.Join(", ", template.Parameters.Select(p => p.Name));
+            }
+
+            var type = Type.Desugar();
+            IEnumerable<TemplateArgument> templateArgs;
+            var templateSpecializationType = type as TemplateSpecializationType;
+            if (templateSpecializationType != null)
+                templateArgs = templateSpecializationType.Arguments;
+            else
+            {
+                var declaration = ((TagType)type).Declaration;
+                var specialization = declaration as ClassTemplateSpecialization;
+                if (specialization == null)
+                    return string.Join(", ",
+                        ((Class)declaration).TemplateParameters.Select(t => t.Name));
+                templateArgs = ((ClassTemplateSpecialization)declaration).Arguments;
+            }
+
+            var paramsList = new List<string>();
+            foreach (var arg in templateArgs.Where(a => a.Kind == TemplateArgument.ArgumentKind.Type))
+            {
+                var argType = arg.Type.Type.IsPointerToPrimitiveType()
+                    ? new CILType(typeof(System.IntPtr))
+                    : arg.Type.Type;
+
+                bool isChar = argType.IsPrimitiveType(PrimitiveType.Char) || argType.IsPrimitiveType(PrimitiveType.UChar);
+
+                if (isChar)
+                {
+                    paramsList.Add("char");
+                }
+                else
+                {
+                    paramsList.Add(argType?.ProtoType?.ToString() ?? "");
+                }
+            }
+
+            return string.Join(", ", paramsList);
+        }
     }
 
     public interface ITypePrinter
