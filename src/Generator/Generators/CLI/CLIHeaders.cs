@@ -519,11 +519,31 @@ namespace CppSharp.Generators.CLI
                 foreach (var @base in @class.Bases.Where(b => b.IsClass && !b.Class.Ignore))
                     GenerateClassMethods(@base.Class.Methods.Where(m => !m.IsOperator).ToList());
 
+            bool myclass = @class.Name == "IRequestDataService"
+                || @class.Name == "IRequestDataExchange"
+                || @class.Name == "IRequestBankCloud"
+                || @class.Name == "IRequestSagePI"
+                || @class.Name == "IRequestInvoicePayments"
+                || @class.Name == "IRequestAppUpdate"
+                || @class.Name == "IRequestMtd"
+                || @class.Name == "IRequestAuthService"
+                || @class.Name == "IRequestConnectedCloud"
+
+                || @class.Name == "IRequestFileIO"
+                || @class.Name == "IRequestLicencing"
+                || @class.Name == "IRequestAnalytics"
+                || @class.Name == "IRequestMaintenance"
+                || @class.Name == "IRequestJobs"
+                || @class.Name == "IRequestDrive"
+                || @class.Name == "IRequestOffice365";
+
             var staticMethods = new List<Method>();
             foreach (var method in methods)
             {
                 if (ASTUtils.CheckIgnoreMethod(method) || FunctionIgnored(method))
+                {
                     continue;
+                }
 
                 if (method.IsConstructor)
                     continue;
@@ -534,7 +554,15 @@ namespace CppSharp.Generators.CLI
                     continue;
                 }
 
-                GenerateMethod(method, null);
+                ProtoMessage pm = myclass ? new ProtoMessage { MessageName = method.Name } : null;
+
+                GenerateMethod(method, pm);
+
+                if (myclass)
+                {
+                    pm.Fields.RemoveRange(0, 2);
+                    Context.Proto.AddRpc(@class.ToProtoPackageName(true, false, false), pm);
+                }
             }
 
             foreach(var method in staticMethods)

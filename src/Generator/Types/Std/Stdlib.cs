@@ -625,24 +625,31 @@ namespace CppSharp.Types.Std
     [TypeMap("std::map", GeneratorKind = GeneratorKind.CLI)]
     public class Map : TypeMap
     {
-        public override bool IsIgnored { get { return true; } }
+        public override bool IsIgnored { get { return false; } }
 
         public override Type CLISignatureType(TypePrinterContext ctx)
         {
-            var type = Type as TemplateSpecializationType;
+            var tempParams = ctx.GetTemplateParameterList();
+
+            var protoParams = ctx.GetProtoTemplateParameterList();
+
+            if(protoParams.StartsWith("utilslib.protobuf.JobResult"))
+            {
+                protoParams = protoParams.Replace("utilslib.protobuf.JobResult", "sint32");
+            }
+
             return new CustomType(
-                $@"System::Collections::Generic::Dictionary<{
-                    type.Arguments[0].Type}, {type.Arguments[1].Type}>^", $"map<{type.Arguments[0].Type.Type.ProtoType},{type.Arguments[1].Type.Type.ProtoType}>");
+                $@"System::Collections::Generic::Dictionary<{tempParams}>^", $"map<{protoParams}>");
         }
 
         public override void CLIMarshalToNative(MarshalContext ctx)
         {
-            throw new System.NotImplementedException();
+            ctx.Return.Write("Meh");
         }
 
         public override void CLIMarshalToManaged(MarshalContext ctx)
         {
-            throw new System.NotImplementedException();
+            ctx.Return.Write("Meh");
         }
 
         public override Type CSharpSignatureType(TypePrinterContext ctx)

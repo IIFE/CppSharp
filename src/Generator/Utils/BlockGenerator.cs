@@ -423,19 +423,79 @@ namespace CppSharp
             Context = context;
         }
 
-        public override string Generate()
+        private void GenerateProtoPackage(string @namespace)
+        {
+            WriteLine("syntax = \"proto3\";");
+            NewLine();
+            WriteLine($"option csharp_namespace = \"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(@namespace.Replace(".protobuf", ""))}\";");
+            NewLine();
+            WriteLine($"package {@namespace};");
+            NewLine();
+        }
+
+        void PrepareEnum(ProtoEnum @enum)
+        {
+            IEnumerable<string> values = @enum.Enums.Select(x => x.Value);
+
+            if (values.Count() != values.Distinct().Count())
+            {
+                WriteLine("option allow_alias = true;");
+            }
+
+            bool needsUnknown = !values.Any(x => x == "0");
+            if (needsUnknown)
+            {
+                @enum.Enums.Add(new KeyValuePair<string, string>($"{@enum.Name}Unknown", "0"));
+            }
+
+            @enum.Enums = @enum.Enums.OrderByDescending(o => o.Value == "0").ThenBy(o => o.Value).ToList();
+        }
+
+        void GenerateEnumItems(ProtoEnum @enum, HashSet<string> enumNamesGeneratedSoFarForNamespaace)
+        {
+            foreach (KeyValuePair<string, string> kvp in @enum.Enums)
+            {
+                if (enumNamesGeneratedSoFarForNamespaace.Contains(kvp.Key))
+                {
+                    WriteLine($"{@enum.Name}{kvp.Key} = {kvp.Value};");
+                }
+                else
+                {
+                    enumNamesGeneratedSoFarForNamespaace.Add(kvp.Key);
+                    WriteLine($"{kvp.Key} = {kvp.Value};");
+                }
+            }
+        }
+
+        string NamespaceToProtoFileName(string @namespace)
+        {
+            string proto = @namespace.Replace(".protobuf", "").Replace('.', '_') + ".proto";
+            return proto.StartsWith('_') ? proto.Remove(0, 1) : proto;
+        }
+
+        void GenerateOutputToFile(string @namespace)
+        {
+            string output = base.Generate();
+
+            string outputFileName = NamespaceToProtoFileName(@namespace);
+            string filePath = Path.Combine(Context.Options.OutputDir, outputFileName);
+            using (StreamWriter stream = File.AppendText(filePath))
+            {
+                stream.Write(output);
+            }
+
+            RootBlock.Text.StringBuilder.Clear();
+        }
+
+        private HashSet<string> GenerateEnumNamespaces()
         {
             HashSet<string> visistedNamespaces = new HashSet<string>();
-            foreach(var enums in Context.Proto.Enums)
+
+            foreach (KeyValuePair<string, List<ProtoEnum>> enums in Context.Proto.Enums)
             {
                 visistedNamespaces.Add(enums.Key);
 
-                WriteLine("syntax = \"proto3\";");
-                NewLine();
-                WriteLine($"option csharp_namespace = \"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(enums.Key.Replace(".protobuf", ""))}\";");
-                NewLine();
-                WriteLine($"package {enums.Key};");
-                NewLine();
+                GenerateProtoPackage(enums.Key);
 
                 HashSet<string> dupEnumItems = new HashSet<string>();
 
@@ -444,184 +504,179 @@ namespace CppSharp
                     Write($"enum {@enum.Name} ");
                     WriteOpenBraceAndIndent();
 
-                    IEnumerable<string> values = @enum.Enums.Select(x => x.Value);
+                    PrepareEnum(@enum);
 
-                    if (values.Count() != values.Distinct().Count())
-                    {
-                        WriteLine("option allow_alias = true;");
-                    }
-
-                    bool needsUnknown = !values.Any(x => x == "0");
-                    if (needsUnknown)
-                    {
-                        @enum.Enums.Add(new KeyValuePair<string, string>($"{@enum.Name}Unknown", "0"));
-                    }
-
-                    @enum.Enums = @enum.Enums.OrderByDescending(o => o.Value == "0").ThenBy(o => o.Value).ToList();
-
-                    foreach (var kvp in @enum.Enums)
-                    {
-                        if (dupEnumItems.Contains(kvp.Key))
-                        {
-                            WriteLine($"{@enum.Name}{kvp.Key} = {kvp.Value};");
-                        }
-                        else
-                        {
-                            dupEnumItems.Add(kvp.Key);
-                            WriteLine($"{kvp.Key} = {kvp.Value};");
-                        }
-                    }
+                    GenerateEnumItems(@enum, dupEnumItems);
 
                     UnindentAndWriteCloseBrace();
                     NewLine();
                 }
 
-                string output = base.Generate();
-
-                string outputFileName = enums.Key.Replace(".protobuf", "").Replace('.', '_') + ".proto";
-                string filePath = Path.Combine(Context.Options.OutputDir, outputFileName);
-                using (var stream = File.AppendText(filePath))
-                {
-                    stream.Write(output);
-                }
-                
-                RootBlock.Text.StringBuilder.Clear();
+                GenerateOutputToFile(enums.Key);
             }
 
-            foreach (var messages in Context.Proto.Messages)
+            return visistedNamespaces;
+        }
+
+        void GenerateMessageFields(ProtoMessage message)
+        {
+            int i = 0;
+            foreach (ProtoField field in message.Fields)
+            {
+                WriteLine($"{field.FieldType} {field.FieldName} = {++i};");
+            }
+        }
+
+        void GenerateMessagesNamespaces(HashSet<string> visistedNamespaces)
+        {
+            foreach (KeyValuePair<string, List<ProtoMessage>> messages in Context.Proto.Messages)
             {
                 if (!visistedNamespaces.Contains(messages.Key))
                 {
-                    WriteLine("syntax = \"proto3\";");
-                    NewLine();
-                    WriteLine($"option csharp_namespace = \"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(messages.Key.Replace(".protobuf", ""))}\";");
-                    NewLine();
-                    WriteLine($"package {messages.Key};");
-                    NewLine();
+                    visistedNamespaces.Add(messages.Key);
+                    GenerateProtoPackage(messages.Key);
                 }
 
-                HashSet<string> dupEnumItems = new HashSet<string>();
+                HashSet<string> allImports = ExtractImportsFromMessages(messages.Value);
+                GenerateImportsForNamespace(messages.Key, allImports);
 
-                HashSet<string> allImports = new HashSet<string>();
-
-                string outputFileName = messages.Key.Replace(".protobuf", "").Replace('.', '_') + ".proto";
-
-                foreach (var msg in messages.Value)
+                foreach (ProtoMessage msg in messages.Value)
                 {
                     bool hasFieldsWithoutTypes = msg.Fields.Any(x => string.IsNullOrEmpty(x.FieldType));
-                    if (msg.Fields.Count() > 0 && !hasFieldsWithoutTypes)
+                    if (msg.MessageName == "Empty" || (msg.Fields.Count() > 0 && !hasFieldsWithoutTypes))
                     {
-                        IEnumerable<string> imports = msg.Fields
-                            .Where(x => x.FieldType.Contains('.'))
-                            .Select(x => x.FieldType.Substring(0, x.FieldType.LastIndexOf('.')));
-
-                        IEnumerable<string> newImports = imports.Except(allImports);
-
-                        foreach (string newImport in newImports)
-                        {
-                            string newImportFinal = newImport;
-                            if (newImportFinal.Contains("repeated "))
-                            {
-                                newImportFinal = newImport.Substring("repeated ".Length);
-                            }
-
-                            string importFileName = newImportFinal.Replace(".protobuf", "").Replace('.', '_') + ".proto";
-
-                            if (importFileName != outputFileName)
-                            {
-                                WriteLine($"import \"Protos/Models/{importFileName}\";");
-                            }
-                        }
-
-                        allImports = allImports.Union(newImports).ToHashSet();
-
                         Write($"message {msg.MessageName} ");
                         WriteOpenBraceAndIndent();
 
-                        int i = 0;                        
-                        foreach (ProtoField field in msg.Fields)
-                        {
-                            WriteLine($"{field.FieldType} {field.FieldName} = {++i};");
-                        }
+                        GenerateMessageFields(msg);
 
                         UnindentAndWriteCloseBrace();
                         NewLine();
                     }
                 }
 
-                string output = base.Generate();
-                
-                string filePath = Path.Combine(Context.Options.OutputDir, outputFileName);
-                using (var stream = File.AppendText(filePath))
-                {
-                    stream.Write(output);
-                }
+                GenerateOutputToFile(messages.Key);
+            }
+        }
 
-                RootBlock.Text.StringBuilder.Clear();
+        HashSet<string> ExtractImportsFromMessages(List<ProtoMessage> messages)
+        {
+            HashSet<string> allImports = new HashSet<string>();
+
+            foreach (ProtoMessage msg in messages)
+            {
+                IEnumerable<string> imports = msg.Fields
+                    .Where(x => x.FieldType.Contains('.'))
+                    .Select(x => x.FieldType.Substring(0, x.FieldType.LastIndexOf('.')));
+
+                foreach(string import in imports)
+                {
+                    string importFinal = import;
+                    if (importFinal.Contains("repeated "))
+                    {
+                        importFinal = import.Substring("repeated ".Length);
+                        allImports.Add(NamespaceToProtoFileName(importFinal));
+                    }
+                    else if (importFinal.Contains("map<"))
+                    {
+                        importFinal = import.Substring("map<".Length);
+                        if (importFinal.Contains(','))
+                        {
+                            IEnumerable<string> types = importFinal.Split(", ").Where(x => x.Contains('.')).Select(x => x.Substring(0, x.LastIndexOf('.')));
+                            foreach (string mapImport in types)
+                            {
+                                allImports.Add(NamespaceToProtoFileName(mapImport));
+                            }
+                        }
+                        else
+                        {
+                            allImports.Add(NamespaceToProtoFileName(importFinal));
+                        }
+                    }
+                    else
+                    {
+                        allImports.Add(NamespaceToProtoFileName(importFinal));
+                    }
+                }
             }
 
-            //Dictionary<string, int> duplicates = new Dictionary<string, int>();
+            return allImports;
+        }
 
-            //foreach(ProtoEnum @enum in Context.Proto.Enums)
-            //{
-            //    if (duplicates.ContainsKey(@enum.Name))
-            //    {
-            //        duplicates[@enum.Name] = duplicates[@enum.Name] + 1;
-            //        @enum.Name = $"{@enum.Name}{duplicates[@enum.Name]}";
-            //    }
-            //    else
-            //    {
-            //        duplicates.Add(@enum.Name, 1);
-            //    }
+        void GenerateImportsForNamespace(string @namespace, HashSet<string> imports)
+        {
+            string namespaceImport = NamespaceToProtoFileName(@namespace);
 
-            //    Write($"enum {@enum.Name} ");
-            //    WriteOpenBraceAndIndent();
+            IEnumerable<string> nonNamespaceImports = imports.Where(x => x != namespaceImport);
 
-            //    IEnumerable<string> values = @enum.Enums.Select(x => x.Value);
+            foreach (string import in nonNamespaceImports)
+            {
+                WriteLine($"import \"Protos/DataService/Models/{import}\";");
+            }
 
-            //    if(values.Count() != values.Distinct().Count())
-            //    {
-            //        WriteLine("option allow_alias = true;");
-            //    }
+            if(nonNamespaceImports.Any())
+            {
+                NewLine();
+            }
+        }
 
-            //    bool needsUnknown = !values.Any(x => x == "0");
-            //    if(needsUnknown)
-            //    {
-            //        @enum.Enums.Add(new KeyValuePair<string, string>("Unknown", "0"));
-            //    }
+        public void GenerateServiceForRpcs(string modelsProtobuf, string @namespace, List<ProtoMessage> rpcs)
+        {
+            string serviceName = $"{CultureInfo.CurrentCulture.TextInfo.ToTitleCase(@namespace.Replace(".protobuf", "")).Replace(".", "")}";
+            Write($"service {serviceName} ");
+            WriteOpenBraceAndIndent();
 
-            //    @enum.Enums = @enum.Enums.OrderByDescending(o => o.Value == "0").ThenBy(o => o.Value).ToList();
+            foreach (ProtoMessage msg in rpcs)
+            {
+                Write($"rpc {msg.MessageName}");
+                bool hasFieldsWithoutTypes = msg.Fields.Any(x => string.IsNullOrEmpty(x.FieldType));
+                if (msg.Fields.Count() > 0 && !hasFieldsWithoutTypes)
+                {
+                    Write($"(.{modelsProtobuf}.{msg.MessageName}Request)");
+                }
+                else
+                {
+                    Write("(.data.service.models.protobuf.Empty)");
+                }
 
-            //    foreach (var kvp in @enum.Enums)
-            //    {
-            //        if(kvp.Key.StartsWith(@enum.Name) || kvp.Key.StartsWith('_') || @enum.Name.EndsWith('_'))
-            //        {
-            //            WriteLine($"{kvp.Key} = {kvp.Value};");                        
-            //        }
-            //        else
-            //        {
-            //            WriteLine($"{@enum.Name}_{kvp.Key} = {kvp.Value};");
-            //        }                    
-            //    }
+                Write($" returns (.{modelsProtobuf}.{msg.MessageName}Response);");
 
-            //    UnindentAndWriteCloseBrace();
-            //    NewLine();
-            //}
+                NewLine();
+            }
 
-            //foreach(ProtoMessage msg in Context.Proto.Messages)
-            //{
-            //    Write($"message {msg.MessageName} ");
-            //    WriteOpenBraceAndIndent();
+            UnindentAndWriteCloseBrace();
+        }
 
-            //    int i = 0;
-            //    foreach(ProtoField field in msg.Fields)
-            //    {
-            //        WriteLine($"{field.FieldType} {field.FieldName} = {++i};");
-            //    }
+        public void GenerateRpcsForNamespaces(HashSet<string> visistedNamespaces)
+        {
+            foreach (KeyValuePair<string, List<ProtoMessage>> rpcs in Context.Proto.Rpcs)
+            {
+                if (!visistedNamespaces.Contains(rpcs.Key))
+                {
+                    visistedNamespaces.Add(rpcs.Key);
+                    GenerateProtoPackage(rpcs.Key);
+                }
 
-            //    UnindentAndWriteCloseBrace();
-            //    NewLine();
-            //}
+                string modelsProtobuf = rpcs.Key.Replace(".protobuf", ".models.protobuf");
+
+                HashSet<string> allImports = new HashSet<string>();
+                allImports.Add(NamespaceToProtoFileName("data.service.models.protobuf"));
+                allImports.Add(NamespaceToProtoFileName(modelsProtobuf));
+                GenerateImportsForNamespace(rpcs.Key, allImports);
+
+                GenerateServiceForRpcs(modelsProtobuf, rpcs.Key, rpcs.Value);
+
+                GenerateOutputToFile(rpcs.Key);
+            }
+        }
+
+        public override string Generate()
+        {
+            HashSet<string> visistedNamespaces = GenerateEnumNamespaces();
+
+            GenerateMessagesNamespaces(visistedNamespaces);
+
+            GenerateRpcsForNamespaces(visistedNamespaces);
 
             return "";
         }

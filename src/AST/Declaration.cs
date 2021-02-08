@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 
 namespace CppSharp.AST
 {
@@ -210,7 +211,7 @@ namespace CppSharp.AST
         {
             get
             {
-                return $"{QualifiedProtoNamespace}.{Name}";
+                return $".{QualifiedProtoNamespace}.{Name}";
             }
         }
 
@@ -218,8 +219,36 @@ namespace CppSharp.AST
         {
             get
             {
-                return string.IsNullOrEmpty(Namespace.QualifiedName) ? $"dataservice.protobuf" : Namespace.QualifiedName.Replace("::", ".").ToLower() + ".protobuf";
+                return string.IsNullOrEmpty(Namespace.QualifiedName) ? $"data.service.models.protobuf" : Namespace.ToProtoPackageName(false, true, true)
+                    .Replace("::", ".").Replace("..", ".").ToLower();
             }
+        }
+
+        public string ToProtoPackageName(bool dropInterfacePrefix, bool useQualified, bool isModels)
+        {
+            string name = useQualified ? QualifiedName : Name;
+            name = dropInterfacePrefix && name.StartsWith('I') ? name.Remove(0, 1) : name;
+
+            StringBuilder newText = new StringBuilder(name.Length * 2);
+            newText.Append(name[0]);
+            for (int i = 1; i < name.Length; i++)
+            {
+                if (char.IsUpper(name[i]))
+                    if ((name[i - 1] != '.' && !char.IsUpper(name[i - 1])) ||
+                        (true && char.IsUpper(name[i - 1]) &&
+                         i < name.Length - 1 && !char.IsUpper(name[i + 1])))
+                        newText.Append('.');
+                newText.Append(name[i]);
+            }
+            return isModels && !newText.ToString().Contains("models", StringComparison.InvariantCultureIgnoreCase)
+                ? (newText.ToString() + ".models.protobuf").ToLower() : (newText.ToString() + ".protobuf").ToLower(); 
+        }
+
+        public string ToProtoPackageQualifiedName()
+        {
+            string name = QualifiedName;
+
+            return (string.Concat(name.Select(x => char.IsUpper(x) ? x + "." : x.ToString())) + ".models.protobuf").ToLower();
         }
 
         public static string QualifiedNameSeparator = "::";
